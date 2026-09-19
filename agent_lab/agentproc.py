@@ -17,9 +17,11 @@ is the harness's doing rather than something the agent has to remember.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import queue
+import re
 import signal
 import subprocess
 import threading
@@ -89,6 +91,24 @@ def build_env(config: Config, env: dict[str, str] | None = None) -> dict[str, st
     return child
 
 
+# --permission-prompts was added in Claude Code 2.1.259. An older binary
+# rejects it as an unknown option and exits before writing a single line, which
+# the referee sees as an arm that never ran. Omitting it costs nothing in a -p
+# run with no permission host: those requests are denied either way.
+PERMISSION_PROMPTS_SINCE = (2, 1, 259)
+
+
+@functools.lru_cache(maxsize=8)
+def agent_version(binary: str) -> tuple[int, ...]:
+    """The agent binary's version, or () if it cannot be determined."""
+    try:
+        done = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return ()
+    found = re.search(r"(\d+)\.(\d+)\.(\d+)", done.stdout or "")
+    return tuple(int(part) for part in found.groups()) if found else ()
+
+
 def build_argv(config: Config, prompt: str, session_id: str | None = None) -> list[str]:
     """The headless Claude Code invocation.
 
@@ -102,11 +122,12 @@ def build_argv(config: Config, prompt: str, session_id: str | None = None) -> li
         "--output-format", "stream-json",
         "--verbose",
         "--permission-mode", config.agent.permission_mode,
-        # Nobody is at the keyboard: anything that would prompt is denied
-        # rather than left hanging.
-        "--permission-prompts", "none",
         "--session-id", session_id or str(uuid.uuid4()),
     ]
+    # Nobody is at the keyboard: anything that would prompt is denied rather
+    # than left hanging - on binaries new enough to accept the flag.
+    if agent_version(config.agent.binary) >= PERMISSION_PROMPTS_SINCE:
+        argv += ["--permission-prompts", "none"]
     if config.agent.allowed_tools:
         argv += ["--allowedTools", ",".join(config.agent.allowed_tools)]
     if config.agent.bare:

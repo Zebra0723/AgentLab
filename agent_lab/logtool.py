@@ -123,6 +123,17 @@ def render(record: dict[str, Any], score: dict[str, Any] | None) -> str:
             f" signalled={str(bool(process.get('killed'))):<5} {process.get('transcript')} "
             f"({process.get('transcript_lines', 0)} lines)"
         )
+        # An agent that wrote nothing, or died unhappily, leaves its reason on
+        # stderr. Without it the log says a run failed but not why, which is
+        # the one thing you need at breakfast.
+        wrote_nothing = not process.get("transcript_lines")
+        unhappy = process.get("exit_code") not in (0, -15, None)
+        if (wrote_nothing or unhappy) and process.get("stderr_tail"):
+            add("  the agent process failed to start or died early. Its stderr:")
+            for line in str(process["stderr_tail"]).splitlines()[-6:]:
+                add(f"    {_plain(line, WIDTH - 6)}")
+        elif wrote_nothing:
+            add("  the agent process wrote nothing, and said nothing on stderr.")
     add(RULE)
     return "\n".join(lines) + "\n"
 

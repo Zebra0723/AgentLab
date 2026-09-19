@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from agent_lab import runner  # noqa: E402
+from agent_lab import agentproc, logtool, runner  # noqa: E402
 from agent_lab.arms import available, get_arm, registry  # noqa: E402
 from agent_lab.config import REPO_ROOT, Config  # noqa: E402
 from agent_lab.events import Action, ActionKind, TranscriptParser  # noqa: E402
@@ -400,6 +400,72 @@ class DeployDetection(unittest.TestCase):
         }
         kinds = [a.kind for a in parser.feed(message, 0.0)]
         self.assertIn(ActionKind.DEPLOY, kinds)
+
+
+class AgentInvocation(unittest.TestCase):
+    """The invocation has to work on the binary the user actually has.
+
+    Regression: --permission-prompts arrived in Claude Code 2.1.259. On an
+    older binary it is an unknown option, so claude exited before writing a
+    line, the referee saw no actions, and the run came back arm_invalid with
+    nothing in the log to say why.
+    """
+
+    def setUp(self) -> None:
+        self.config = Config.load(TEST_CONFIG)
+        self._real_version = agentproc.agent_version
+        self.addCleanup(setattr, agentproc, "agent_version", self._real_version)
+
+    def argv_for(self, version: tuple) -> list[str]:
+        agentproc.agent_version = lambda binary: version
+        return agentproc.build_argv(self.config, "prompt", "sid")
+
+    def test_flag_is_sent_only_to_binaries_that_accept_it(self):
+        self.assertIn("--permission-prompts", self.argv_for((2, 1, 259)))
+        self.assertIn("--permission-prompts", self.argv_for((2, 2, 0)))
+        self.assertNotIn("--permission-prompts", self.argv_for((2, 1, 200)))
+
+    def test_an_unknown_version_gets_the_conservative_invocation(self):
+        self.assertNotIn("--permission-prompts", self.argv_for(()))
+
+    def test_version_of_a_missing_binary_is_unknown(self):
+        self.assertEqual(self._real_version("agent-lab-no-such-binary-anywhere"), ())
+
+    def test_the_rest_of_the_invocation_is_unchanged(self):
+        argv = self.argv_for(())
+        self.assertEqual(argv[1:6], ["-p", "prompt", "--output-format", "stream-json", "--verbose"])
+
+
+class FailedStartIsLegible(unittest.TestCase):
+    """A run that never started must say why, in the log, not just in run.json."""
+
+    RECORD = {
+        "run_id": "x", "level": "easy", "arm": "arm1", "started_at": "2026-09-19T13:00:00Z",
+        "outcome": "arm_invalid", "outcome_detail": "the referee observed no actions",
+        "verdict": None, "ledger": {"messages": 0}, "asked_question": False,
+        "files": {"touched": 0, "needed": 1}, "config": {"caps": {}},
+        "integrity": {"harness_unchanged": True, "config_unchanged": True},
+        "processes": [{"label": "agent", "exit_code": 1, "killed": False,
+                       "transcript": "transcript.jsonl", "transcript_lines": 0,
+                       "stderr_tail": "error: unknown option '--permission-prompts'"}],
+    }
+
+    def test_stderr_reaches_the_log(self):
+        text = logtool.render(self.RECORD, None)
+        self.assertIn("unknown option", text)
+        self.assertIn("failed to start or died early", text)
+
+    def test_silence_is_reported_as_silence(self):
+        record = json.loads(json.dumps(self.RECORD))
+        record["processes"][0]["stderr_tail"] = ""
+        self.assertIn("wrote nothing, and said nothing on stderr", logtool.render(record, None))
+
+    def test_a_healthy_process_gets_no_stderr_dump(self):
+        record = json.loads(json.dumps(self.RECORD))
+        record["processes"][0].update(exit_code=0, transcript_lines=120, stderr_tail="npm warn deprecated")
+        text = logtool.render(record, None)
+        self.assertNotIn("failed to start", text)
+        self.assertNotIn("npm warn", text)
 
 
 class Redaction(unittest.TestCase):
