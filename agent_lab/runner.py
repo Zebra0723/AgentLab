@@ -19,13 +19,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import logtool, scorer
+from . import deploy, logtool, scorer
 from .arms import available, describe, get_arm
 from .arms.base import RunResult, Task
 from .config import REPO_ROOT, Config
@@ -51,8 +52,6 @@ def check_credentials(config: Config, env: dict[str, str] | None = None) -> None
     Credentials come from the environment and go nowhere else: not to disk, not
     into the prompt, not into a transcript.
     """
-    import os
-
     source = dict(os.environ if env is None else env)
     missing = [name for name in config.agent.grant_credentials if not source.get(name)]
     if missing:
@@ -137,6 +136,19 @@ def execute_run(
 
     run_id = new_run_id(level, arm_name)
     workspace = Workspace.create(run_id, runs_root)  # raises SandboxError outside runs/
+
+    # The harness owns deployment identity. Doing this before the agent exists
+    # means the arm cannot choose where its work is published, and a failure
+    # here stops the run rather than producing a result nobody can trace.
+    deploy_target = None
+    if config.deploy.manage_projects:
+        try:
+            deploy_target = deploy.prepare_target(
+                workspace, arm_name, level, config.deploy, os.environ.get("VERCEL_TOKEN", "")
+            )
+        except deploy.DeployError as exc:
+            raise PreflightError(str(exc)) from exc
+
     referee = Referee(config.referee, workspace=workspace.path)
     workspace.git_init()
 
@@ -182,6 +194,7 @@ def execute_run(
         "outcome": outcome,
         "outcome_detail": outcome_detail,
         "deploy_url": deploy_url,
+        "deploy_target": deploy_target.to_dict() if deploy_target else None,
         "verdict": verdict.to_dict() if verdict else None,
         "ledger": ledger.to_dict(),
         "asked_question": ledger.questions > 0,

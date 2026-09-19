@@ -82,6 +82,9 @@ def render(record: dict[str, Any], score: dict[str, Any] | None) -> str:
     final_url = ((score or {}).get("metrics") or {}).get("final_url")
     if final_url and scored_url and final_url != scored_url:
         add(f"  landed {_plain(final_url, 60)}")
+    target = record.get("deploy_target") or {}
+    if target.get("project"):
+        add(f"  project {_plain(target['project'], 60)}")
     add("")
 
     # -- instruction following, mechanical --------------------------------

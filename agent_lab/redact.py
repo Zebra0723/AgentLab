@@ -66,11 +66,24 @@ class Redactor:
         )
 
     @classmethod
-    def from_env(cls, env: dict[str, str] | None = None, extra_names: Iterable[str] = ()) -> "Redactor":
+    def from_env(
+        cls,
+        env: dict[str, str] | None = None,
+        extra_names: Iterable[str] = (),
+        extra_literals: dict[str, str] | None = None,
+    ) -> "Redactor":
+        """Build a redactor from the environment.
+
+        `extra_literals` covers a credential the harness was handed directly
+        rather than read from the environment - a token passed as an argument
+        is still a token, and must not reach an error message.
+        """
         env = dict(os.environ if env is None else env)
         names = {n for n in env if n in SENSITIVE_ENV_EXACT or SENSITIVE_ENV_PATTERN.search(n)}
         names.update(extra_names)
-        return cls({n: env[n] for n in names if env.get(n)})
+        literals = {n: env[n] for n in names if env.get(n)}
+        literals.update({k: v for k, v in (extra_literals or {}).items() if v})
+        return cls(literals)
 
     def text(self, value: str) -> str:
         if not value:

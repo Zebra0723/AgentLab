@@ -202,6 +202,40 @@ UNSCORED and the checks are printed as manual prompts** - the harness never
 guesses a pass. Install it with `pip install playwright` (a browser is needed;
 set `AGENT_LAB_CHROMIUM` if Playwright cannot find one).
 
+## Deployments
+
+The harness decides which project a run publishes to, not the agent. Before the
+agent starts, it creates the project and writes `.vercel/project.json` into the
+workspace; the agent's own `vercel deploy` then lands there without being told
+to, and without being able to choose otherwise.
+
+Names come from the arm and the level:
+
+| arm | level | project |
+| --- | --- | --- |
+| arm1 | easy | `agent-1-level-1` |
+| arm2 | medium | `agent-2-level-2` |
+| arm1 | hard | `agent-1-level-3` |
+
+Re-running the same arm on the same level gives `agent-1-level-1-2`, then `-3`,
+so every run keeps its own project and its own URL and stays re-scorable later.
+The project name is recorded in `run.json` and printed in the log.
+
+All of it is configurable under `[deploy]` in `config.toml` - the template, the
+level numbering, the API endpoints (so a Vercel API version bump needs no code
+change), and `team_id` for a token scoped to a team rather than a personal
+account. Set `manage_projects = false` to hand naming back to the agent, at the
+cost of unreadable names and one more thing varying between arms.
+
+A run refuses to start if the project cannot be created. A result nobody can
+trace back to an arm is worse than no result.
+
+**Deployment Protection.** If your Vercel account turns it on for new projects,
+every deployment answers anonymous visitors with a 302 to `vercel.com/sso-api`.
+The scorer catches this - `SHIPPED: FAIL ... redirected off-origin` - but the
+fix is on Vercel's side: turn Vercel Authentication off as the default for new
+projects.
+
 ## Safety
 
 - Agents run only inside `runs/<id>/workspace/`. A sandbox path that resolves
@@ -252,11 +286,13 @@ Worth knowing before you trust a number.
 python3 -m unittest discover -s tests -v
 ```
 
-37 tests. `tests/test_referee.py` fires every kill condition through the real
+69 tests. `tests/test_referee.py` fires every kill condition through the real
 runner and a real child process - the only stand-in is the agent itself
 (`agent_lab/fakeagent.py`, which replays a script and speaks the same
 stream-json protocol). `tests/test_scorer.py` serves a correct page, a broken
-page and no page, and checks each verdict.
+page, a dead page and one that redirects off-origin, and checks each verdict.
+`tests/test_deploy.py` covers project naming and collisions against a fake API
+client, so the suite never touches the network.
 
 Tests use `tests/config.test.toml`: the same config shape with caps small enough
 to fire in seconds.

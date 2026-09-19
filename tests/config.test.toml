@@ -41,3 +41,16 @@ http_timeout_seconds = 5
 check_timeout_ms = 4000
 viewport_width = 1280
 viewport_height = 800
+
+[deploy]
+# The test suite must not reach Vercel. Naming and collision logic are tested
+# against a fake client in test_deploy.py.
+manage_projects = false
+name_template = "agent-{agent}-level-{level}"
+level_numbers = { easy = 1, medium = 2, hard = 3 }
+max_suffix = 5
+api_base = "https://api.vercel.invalid"
+create_path = "/v11/projects"
+lookup_path = "/v9/projects"
+team_id = ""
+timeout_seconds = 5

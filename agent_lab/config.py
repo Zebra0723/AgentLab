@@ -112,6 +112,36 @@ class AgentConfig:
 
 
 @dataclass(frozen=True)
+class DeployConfig:
+    """How the harness names and creates the project a run deploys to."""
+
+    manage_projects: bool
+    name_template: str
+    level_numbers: dict[str, int]
+    max_suffix: int
+    api_base: str
+    create_path: str
+    lookup_path: str
+    team_id: str
+    timeout_seconds: float
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "DeployConfig":
+        d = d or {}
+        return cls(
+            manage_projects=bool(d.get("manage_projects", False)),
+            name_template=str(d.get("name_template", "agent-{agent}-level-{level}")),
+            level_numbers={str(k): int(v) for k, v in (d.get("level_numbers") or {}).items()},
+            max_suffix=int(d.get("max_suffix", 50)),
+            api_base=str(d.get("api_base", "https://api.vercel.com")),
+            create_path=str(d.get("create_path", "/v11/projects")),
+            lookup_path=str(d.get("lookup_path", "/v9/projects")),
+            team_id=str(d.get("team_id", "")),
+            timeout_seconds=float(d.get("timeout_seconds", 30)),
+        )
+
+
+@dataclass(frozen=True)
 class ScorerConfig:
     http_timeout_seconds: float
     check_timeout_ms: int
@@ -135,6 +165,7 @@ class Config:
     referee: RefereeConfig
     agent: AgentConfig
     scorer: ScorerConfig
+    deploy: DeployConfig
     raw: dict[str, Any] = field(repr=False, default_factory=dict)
 
     @classmethod
@@ -148,6 +179,7 @@ class Config:
             referee=RefereeConfig.from_dict(data["referee"]),
             agent=AgentConfig.from_dict(data["agent"]),
             scorer=ScorerConfig.from_dict(data["scorer"]),
+            deploy=DeployConfig.from_dict(data.get("deploy")),
             raw=data,
         )
 
