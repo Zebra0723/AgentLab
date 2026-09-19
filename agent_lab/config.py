@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +50,7 @@ class DetectConfig:
 class RefereeConfig:
     message_cap: int
     wall_clock_seconds: float
+    wall_clock_by_level: dict[str, float]
     deploy_cap: int
     silent_loop_writes: int
     question_cap: int
@@ -63,6 +64,7 @@ class RefereeConfig:
         return cls(
             message_cap=int(d["message_cap"]),
             wall_clock_seconds=float(d["wall_clock_seconds"]),
+            wall_clock_by_level={str(k): float(v) for k, v in (d.get("wall_clock_by_level") or {}).items()},
             deploy_cap=int(d["deploy_cap"]),
             silent_loop_writes=int(d["silent_loop_writes"]),
             question_cap=int(d["question_cap"]),
@@ -71,6 +73,11 @@ class RefereeConfig:
             tick_seconds=float(d["tick_seconds"]),
             detect=DetectConfig.from_dict(d["detect"]),
         )
+
+    def for_level(self, level: str) -> "RefereeConfig":
+        """The caps as they apply to one level. Only the clock varies."""
+        seconds = self.wall_clock_by_level.get(level, self.wall_clock_seconds)
+        return self if seconds == self.wall_clock_seconds else replace(self, wall_clock_seconds=seconds)
 
     def caps_summary(self) -> dict[str, Any]:
         return {
@@ -108,6 +115,36 @@ class AgentConfig:
             extra_args=tuple(d.get("extra_args", ())),
             env_passthrough=tuple(d["env_passthrough"]),
             grant_credentials=tuple(d["grant_credentials"]),
+        )
+
+
+@dataclass(frozen=True)
+class EmailConfig:
+    """Where the run report is sent. The password lives in the environment."""
+
+    enabled: bool
+    to: str
+    from_address: str
+    username: str
+    smtp_host: str
+    smtp_port: int
+    starttls: bool
+    password_env: str
+    timeout_seconds: float
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any] | None) -> "EmailConfig":
+        d = d or {}
+        return cls(
+            enabled=bool(d.get("enabled", False)),
+            to=str(d.get("to", "")),
+            from_address=str(d.get("from_address", "")),
+            username=str(d.get("username", "")),
+            smtp_host=str(d.get("smtp_host", "")),
+            smtp_port=int(d.get("smtp_port", 587)),
+            starttls=bool(d.get("starttls", True)),
+            password_env=str(d.get("password_env", "SMTP_PASSWORD")),
+            timeout_seconds=float(d.get("timeout_seconds", 30)),
         )
 
 
@@ -166,6 +203,7 @@ class Config:
     agent: AgentConfig
     scorer: ScorerConfig
     deploy: DeployConfig
+    email: EmailConfig
     raw: dict[str, Any] = field(repr=False, default_factory=dict)
 
     @classmethod
@@ -180,6 +218,7 @@ class Config:
             agent=AgentConfig.from_dict(data["agent"]),
             scorer=ScorerConfig.from_dict(data["scorer"]),
             deploy=DeployConfig.from_dict(data.get("deploy")),
+            email=EmailConfig.from_dict(data.get("email")),
             raw=data,
         )
 

@@ -1,31 +1,42 @@
 {
   "level": "hard",
-  "description": "Markdown notes: editor renders markdown, notes persist across reload, search filters.",
+  "description": "Pong: the ball moves, the paddle answers the keys, someone scores, and the ball never leaves the field.",
   "checks": [
-    {"name": "note-list", "type": "exists", "selector": "#note-list"},
-    {"name": "new-note-button", "type": "exists", "selector": "#new-note"},
-    {"name": "editor", "type": "exists", "selector": "#editor"},
-    {"name": "preview", "type": "exists", "selector": "#preview"},
-    {"name": "search-box", "type": "exists", "selector": "#search"},
-    {"name": "renders-heading", "type": "exists", "selector": "#preview h1",
-     "steps": [{"click": "#new-note"}, {"fill": {"#editor": "# Title One"}}, {"wait_ms": 400}]},
-    {"name": "renders-bold", "type": "exists", "selector": "#preview strong, #preview b",
-     "steps": [{"click": "#new-note"}, {"fill": {"#editor": "some **bold** text"}}, {"wait_ms": 400}]},
-    {"name": "renders-italic", "type": "exists", "selector": "#preview em, #preview i",
-     "steps": [{"click": "#new-note"}, {"fill": {"#editor": "some *italic* text"}}, {"wait_ms": 400}]},
-    {"name": "renders-link", "type": "exists", "selector": "#preview a[href]",
-     "steps": [{"click": "#new-note"}, {"fill": {"#editor": "a [link](https://example.com) here"}}, {"wait_ms": 400}]},
-    {"name": "renders-code", "type": "exists", "selector": "#preview code",
-     "steps": [{"click": "#new-note"}, {"fill": {"#editor": "use `code` inline"}}, {"wait_ms": 400}]},
-    {"name": "renders-list", "type": "exists", "selector": "#preview ul li",
-     "steps": [{"click": "#new-note"}, {"fill": {"#editor": "- one\n- two"}}, {"wait_ms": 400}]},
-    {"name": "persists-across-reload", "type": "text_present", "text": "Persistent Note",
-     "steps": [{"click": "#new-note"}, {"fill": {"#editor": "# Persistent Note\n\nbody text"}},
-               {"wait_ms": 600}, {"reload": true}, {"wait_ms": 600}]},
-    {"name": "search-filters", "type": "count", "selector": "#note-list > *", "expect": 1,
-     "steps": [{"click": "#new-note"}, {"fill": {"#editor": "# Alpha"}}, {"wait_ms": 400},
-               {"click": "#new-note"}, {"fill": {"#editor": "# Beta"}}, {"wait_ms": 400},
-               {"fill": {"#search": "Alpha"}}, {"wait_ms": 500}]},
-    {"name": "no-console-errors", "type": "no_console_errors"}
+    {
+      "name": "ball-moves",
+      "type": "evaluate_changes",
+      "wait_ms": 500,
+      "expression": "JSON.stringify(window.pong && window.pong.ball)"
+    },
+    {
+      "name": "paddle-responds-to-keys",
+      "type": "evaluate_changes",
+      "expression": "window.pong && window.pong.paddles && window.pong.paddles.left",
+      "steps": [
+        {
+          "wait_ms": 400
+        }
+      ],
+      "steps_between": [
+        {
+          "hold": {
+            "key": "ArrowUp",
+            "ms": 700
+          }
+        }
+      ]
+    },
+    {
+      "name": "score-increments",
+      "type": "wait_for_expression",
+      "timeout_ms": 15000,
+      "expression": "() => window.pong && window.pong.score && (window.pong.score.left + window.pong.score.right) > 0"
+    },
+    {
+      "name": "ball-stays-in-field",
+      "type": "evaluate",
+      "expect": true,
+      "expression": "async () => { const p = window.pong; if (!p || !p.field) return false; const w = p.field.width, h = p.field.height; if (!(w > 0 && h > 0)) return false; for (let i = 0; i < 60; i++) { const b = window.pong.ball; if (!b) return false; if (b.x < 0 || b.x > w || b.y < 0 || b.y > h) return false; await new Promise(r => setTimeout(r, 50)); } return true; }"
+    }
   ]
 }

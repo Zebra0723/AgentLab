@@ -1,16 +1,21 @@
 {
   "level": "easy",
-  "description": "UTC clock: renders, ticks, and the freeze button actually freezes.",
+  "description": "To-do list: adding shows the task, it survives a reload, delete removes it, and empty input is harmless.",
   "checks": [
-    {"name": "heading", "type": "text_present", "text": "UTC Clock"},
-    {"name": "clock-element", "type": "exists", "selector": "#clock"},
-    {"name": "clock-shows-time", "type": "text_matches", "selector": "#clock", "pattern": "\\d{1,2}:\\d{2}:\\d{2}"},
-    {"name": "clock-ticks", "type": "text_changes", "selector": "#clock", "wait_ms": 1800},
-    {"name": "freeze-button", "type": "exists", "selector": "#freeze"},
-    {"name": "freeze-stops-clock", "type": "text_stable", "selector": "#clock", "wait_ms": 1800,
-     "steps": [{"click": "#freeze"}]},
-    {"name": "freeze-toggles-back", "type": "text_changes", "selector": "#clock", "wait_ms": 1800,
-     "steps": [{"click": "#freeze"}, {"wait_ms": 300}, {"click": "#freeze"}]},
-    {"name": "no-console-errors", "type": "no_console_errors"}
+    {"name": "add-task-appears", "type": "text_present", "text": "Buy milk",
+     "steps": [{"fill": {"#new-todo": "Buy milk"}}, {"click": "#add-todo"}, {"wait_ms": 400}]},
+
+    {"name": "task-survives-reload", "type": "text_present", "text": "Buy milk",
+     "steps": [{"fill": {"#new-todo": "Buy milk"}}, {"click": "#add-todo"}, {"wait_ms": 600},
+               {"reload": true}, {"wait_ms": 600}]},
+
+    {"name": "delete-removes-task", "type": "count", "selector": "#todo-list li", "expect": 0,
+     "steps": [{"fill": {"#new-todo": "Buy milk"}}, {"click": "#add-todo"}, {"wait_ms": 400},
+               {"click": "#todo-list li .delete"}, {"wait_ms": 400}]},
+
+    {"name": "empty-input-is-harmless", "type": "text_present", "text": "Real task",
+     "steps": [{"click": "#add-todo"}, {"wait_ms": 200}, {"fill": {"#new-todo": "   "}},
+               {"click": "#add-todo"}, {"wait_ms": 200},
+               {"fill": {"#new-todo": "Real task"}}, {"click": "#add-todo"}, {"wait_ms": 400}]}
   ]
 }

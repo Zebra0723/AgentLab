@@ -23,25 +23,41 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent_lab import scorer  # noqa: E402
 from agent_lab.config import Config  # noqa: E402
-from agent_lab.scorer import same_origin  # noqa: E402
+from agent_lab.scorer import run_checks, same_origin  # noqa: E402
 
 TEST_CONFIG = Path(__file__).resolve().parent / "config.test.toml"
 
-GOOD_CLOCK = """<!doctype html><html><head><meta charset="utf-8"><title>UTC Clock</title></head><body>
-<h1>UTC Clock</h1><div id="clock">--:--:--</div><button id="freeze">Freeze</button>
+GOOD_TODO = """<!doctype html><html><head><meta charset="utf-8"><title>To-do</title></head><body>
+<h1>To-do</h1>
+<input id="new-todo"><button id="add-todo">Add</button>
+<ul id="todo-list"></ul>
 <script>
-let frozen=false;
-function tick(){if(frozen)return;document.getElementById('clock').textContent=new Date().toISOString().slice(11,19);}
-tick();setInterval(tick,1000);
-document.getElementById('freeze').onclick=()=>{frozen=!frozen;};
+const KEY = 'todos';
+let todos = JSON.parse(localStorage.getItem(KEY) || '[]');
+function save() { localStorage.setItem(KEY, JSON.stringify(todos)); }
+function render() {
+  const ul = document.getElementById('todo-list'); ul.innerHTML = '';
+  todos.forEach((t, i) => {
+    const li = document.createElement('li');
+    const s = document.createElement('span'); s.textContent = t; li.appendChild(s);
+    const b = document.createElement('button'); b.className = 'delete'; b.textContent = 'x';
+    b.onclick = () => { todos.splice(i, 1); save(); render(); };
+    li.appendChild(b); ul.appendChild(li);
+  });
+}
+document.getElementById('add-todo').onclick = () => {
+  const inp = document.getElementById('new-todo');
+  const v = (inp.value || '').trim();
+  if (!v) return;
+  todos.push(v); save(); inp.value = ''; render();
+};
+render();
 </script></body></html>
 """
 
-# Looks right, is not: the time never changes and freeze does nothing.
-BROKEN_CLOCK = """<!doctype html><html><head><meta charset="utf-8"><title>UTC Clock</title></head><body>
-<h1>UTC Clock</h1><div id="clock">12:00:00</div><button id="freeze">Freeze</button>
-<script>console.error('boom');</script></body></html>
-"""
+# Looks right, is not: nothing is persisted, so a reload loses the list.
+BROKEN_TODO = GOOD_TODO.replace("localStorage.setItem(KEY, JSON.stringify(todos));", "/* never saved */") \
+                       .replace("JSON.parse(localStorage.getItem(KEY) || '[]')", "[]")
 
 
 @contextlib.contextmanager
@@ -128,7 +144,7 @@ class ScorerCase(unittest.TestCase):
 
 class GoodBuild(ScorerCase):
     def test_correct_page_is_built_and_shipped(self):
-        with serving(GOOD_CLOCK) as url:
+        with serving(GOOD_TODO) as url:
             report = scorer.score(url, "easy", self.config)
         self.assertEqual(report.built, scorer.PASS, report.built_detail)
         self.assertEqual(report.shipped, scorer.PASS, report.shipped_detail)
@@ -138,18 +154,17 @@ class GoodBuild(ScorerCase):
 
 class BrokenBuild(ScorerCase):
     def test_broken_page_fails_the_checks_it_should(self):
-        with serving(BROKEN_CLOCK) as url:
+        with serving(BROKEN_TODO) as url:
             report = scorer.score(url, "easy", self.config)
         statuses = self.statuses(report)
         self.assertEqual(report.built, scorer.FAIL)
         # It still ships: it returns 200 and renders. The two are independent,
         # which is the whole point of reporting them separately.
         self.assertEqual(report.shipped, scorer.PASS, report.shipped_detail)
-        self.assertEqual(statuses["clock-ticks"], scorer.FAIL)
-        self.assertEqual(statuses["no-console-errors"], scorer.FAIL)
+        self.assertEqual(statuses["task-survives-reload"], scorer.FAIL)
         # ...and still passes the ones it genuinely meets.
-        self.assertEqual(statuses["heading"], scorer.PASS)
-        self.assertEqual(statuses["clock-element"], scorer.PASS)
+        self.assertEqual(statuses["add-task-appears"], scorer.PASS)
+        self.assertEqual(statuses["delete-removes-task"], scorer.PASS)
 
 
 class NothingToScore(ScorerCase):
@@ -157,10 +172,10 @@ class NothingToScore(ScorerCase):
         report = scorer.score(None, "easy", self.config)
         self.assertEqual(report.shipped, scorer.FAIL)
         self.assertNotEqual(report.built, scorer.PASS)
-        self.assertEqual(len(report.manual_prompts), 8)
+        self.assertEqual(len(report.manual_prompts), 4)
 
     def test_dead_url_does_not_ship(self):
-        with serving(GOOD_CLOCK) as url:
+        with serving(GOOD_TODO) as url:
             dead = url + "missing-page.html"
             report = scorer.score(dead, "easy", self.config)
         self.assertEqual(report.shipped, scorer.FAIL)
@@ -178,10 +193,62 @@ class OffOriginRedirect(ScorerCase):
         self.assertIn("localhost", report.metrics.get("final_url", ""))
 
     def test_the_final_url_is_always_recorded(self):
-        with serving(GOOD_CLOCK) as url:
+        with serving(GOOD_TODO) as url:
             report = scorer.score(url, "easy", self.config)
         self.assertEqual(report.shipped, scorer.PASS)
         self.assertIn("127.0.0.1", report.metrics.get("final_url", ""))
+
+
+LIVE_STATE = """<!doctype html><html><body><div id="box">live</div>
+<script>
+window.state = {ticks: 0, ups: 0};
+setInterval(() => { window.state.ticks++; }, 50);
+addEventListener('keydown', e => { if (e.key === 'ArrowUp') window.state.ups++; });
+</script></body></html>
+"""
+
+
+class JsStateChecks(ScorerCase):
+    """A game's truth is in its state object, not its pixels."""
+
+    def statuses_for(self, checks, html=LIVE_STATE):
+        with serving(html) as url:
+            return {c.name: (c.status, c.detail) for c in run_checks(url, checks, self.config)}
+
+    def test_evaluate_reads_the_pages_own_state(self):
+        result = self.statuses_for([
+            {"name": "has-state", "type": "evaluate", "expression": "typeof window.state === 'object'"},
+            {"name": "wrong-value", "type": "evaluate", "expression": "window.state.ticks", "expect": -1},
+        ])
+        self.assertEqual(result["has-state"][0], scorer.PASS)
+        self.assertEqual(result["wrong-value"][0], scorer.FAIL)
+
+    def test_evaluate_changes_catches_movement_and_stillness(self):
+        result = self.statuses_for([
+            {"name": "moves", "type": "evaluate_changes", "expression": "window.state.ticks", "wait_ms": 300},
+            {"name": "still", "type": "evaluate_changes", "expression": "window.state.ups", "wait_ms": 300},
+        ])
+        self.assertEqual(result["moves"][0], scorer.PASS)
+        self.assertEqual(result["still"][0], scorer.FAIL, "nothing pressed a key, so this must not change")
+
+    def test_a_held_key_is_seen_between_the_readings(self):
+        """Regression: press() is a keydown and keyup in the same instant, and
+        steps run before the readings, so neither could measure a held key."""
+        result = self.statuses_for([{
+            "name": "holds", "type": "evaluate_changes", "expression": "window.state.ups",
+            "steps_between": [{"hold": {"key": "ArrowUp", "ms": 200}}],
+        }])
+        self.assertEqual(result["holds"][0], scorer.PASS, result["holds"][1])
+
+    def test_wait_for_expression_waits(self):
+        result = self.statuses_for([
+            {"name": "arrives", "type": "wait_for_expression", "timeout_ms": 5000,
+             "expression": "() => window.state.ticks > 5"},
+            {"name": "never", "type": "wait_for_expression", "timeout_ms": 1200,
+             "expression": "() => window.state.ups > 99"},
+        ])
+        self.assertEqual(result["arrives"][0], scorer.PASS)
+        self.assertEqual(result["never"][0], scorer.FAIL)
 
 
 class WithoutPlaywright(ScorerCase):
@@ -190,7 +257,7 @@ class WithoutPlaywright(ScorerCase):
         original = scorer.playwright_available
         scorer.playwright_available = lambda: (False, "playwright is not installed (test)")
         try:
-            with serving(GOOD_CLOCK) as url:
+            with serving(GOOD_TODO) as url:
                 report = scorer.score(url, "easy", self.config)
         finally:
             scorer.playwright_available = original
@@ -199,7 +266,7 @@ class WithoutPlaywright(ScorerCase):
         self.assertEqual(report.shipped, scorer.UNSCORED)
         self.assertEqual(report.http_status, 200)
         self.assertEqual(report.checks, [])
-        self.assertEqual(len(report.manual_prompts), 8)
+        self.assertEqual(len(report.manual_prompts), 4)
         self.assertTrue(all(p.startswith("[MANUAL]") for p in report.manual_prompts))
 
 

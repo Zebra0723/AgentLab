@@ -232,6 +232,24 @@ def _run_steps(page, steps: list[dict[str, Any]], timeout: int) -> None:
                 _set_value(page, selector, str(value), timeout)
         elif "press" in step:
             page.locator(step["press"]["selector"]).first.press(step["press"]["key"], timeout=timeout)
+        elif "hold" in step:
+            # Hold a key down, the way a player does. press() is a keydown and
+            # a keyup in the same instant, so anything driven by held-key state
+            # never moves at all between them.
+            spec = step["hold"]
+            page.keyboard.down(spec["key"])
+            page.wait_for_timeout(int(spec.get("ms", 500)))
+            page.keyboard.up(spec["key"])
+        elif "keys" in step:
+            # Held-key input: a paddle does not move on one tap.
+            spec = step["keys"]
+            target = spec.get("selector")
+            for _ in range(int(spec.get("times", 1))):
+                if target:
+                    page.locator(target).first.press(spec["key"], timeout=timeout)
+                else:
+                    page.keyboard.press(spec["key"])
+                page.wait_for_timeout(int(spec.get("delay_ms", 30)))
         elif "reload" in step:
             page.reload(wait_until="load")
         elif "wait_ms" in step:
@@ -244,6 +262,19 @@ def _text_of(page, selector: str, timeout: int) -> str:
     locator = page.locator(selector).first
     locator.wait_for(state="attached", timeout=timeout)
     return (locator.inner_text() or "").strip()
+
+
+def _gap(page, check: dict[str, Any], timeout: int) -> None:
+    """What happens between two readings: a wait, or actions, or both.
+
+    A check like "the paddle answers the keys" is only meaningful if the key is
+    held between the readings. Run the actions before, and the movement is over
+    before the first reading is taken.
+    """
+    _run_steps(page, check.get("steps_between", []), timeout)
+    wait = check.get("wait_ms")
+    if wait or not check.get("steps_between"):
+        page.wait_for_timeout(int(wait if wait is not None else 500))
 
 
 def _assert(page, check: dict[str, Any], errors: "PageErrors", timeout: int) -> tuple[bool, str]:
@@ -293,12 +324,29 @@ def _assert(page, check: dict[str, Any], errors: "PageErrors", timeout: int) -> 
 
     if kind in ("text_changes", "text_stable"):
         before = _text_of(page, check["selector"], timeout)
-        page.wait_for_timeout(int(check.get("wait_ms", 1500)))
+        _gap(page, check, timeout)
         after = _text_of(page, check["selector"], timeout)
         changed = before != after
         want_change = kind == "text_changes"
         detail = f"{before[:30]!r} -> {after[:30]!r}"
         return (changed == want_change), detail
+
+    if kind == "evaluate":
+        # A game's truth lives in its state object, not in its pixels.
+        actual = page.evaluate(check["expression"])
+        expected = check.get("expect", True)
+        return actual == expected, f"got {str(actual)[:60]!r}, expected {str(expected)[:40]!r}"
+
+    if kind == "evaluate_changes":
+        before = page.evaluate(check["expression"])
+        _gap(page, check, timeout)
+        after = page.evaluate(check["expression"])
+        return before != after, f"{str(before)[:40]!r} -> {str(after)[:40]!r}"
+
+    if kind == "wait_for_expression":
+        # For something that becomes true on its own, like a goal being scored.
+        page.wait_for_function(check["expression"], timeout=int(check.get("timeout_ms", timeout)))
+        return True, "became true within the time allowed"
 
     if kind == "no_console_errors":
         # Let late-arriving resource errors land, so this check does not depend
@@ -440,6 +488,10 @@ def manual_prompt(check: dict[str, Any]) -> str:
                 described.append(f"wait {step['wait_ms']}ms")
             elif "press" in step:
                 described.append(f"press {step['press']['key']} in {step['press']['selector']}")
+            elif "hold" in step:
+                described.append(f"hold {step['hold']['key']} for {step['hold'].get('ms', 500)}ms")
+            elif "keys" in step:
+                described.append(f"tap {step['keys']['key']} {step['keys'].get('times', 1)} times")
         prefix = "; ".join(described) + " -> "
 
     body = {
@@ -455,6 +507,12 @@ def manual_prompt(check: dict[str, Any]) -> str:
         "text_changes": lambda: f"does {check.get('selector')} change within {check.get('wait_ms', 1500)}ms?",
         "text_stable": lambda: f"does {check.get('selector')} stay unchanged for {check.get('wait_ms', 1500)}ms?",
         "no_console_errors": lambda: "is the browser console free of errors?",
+        "evaluate": lambda: f"in the console, does {check.get('expression')} give {check.get('expect', True)}?",
+        "evaluate_changes": lambda: f"does {check.get('expression')} change within {check.get('wait_ms', 500)}ms?",
+        "wait_for_expression": lambda: (
+            f"does {check.get('expression')} become true within "
+            f"{int(check.get('timeout_ms', 10000)) / 1000:g}s?"
+        ),
     }.get(kind, lambda: f"check {kind}")()
     return f"[MANUAL] {name}: {prefix}{body}"
 

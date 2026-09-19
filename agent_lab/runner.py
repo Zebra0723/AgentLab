@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import deploy, logtool, scorer
+from . import deploy, logtool, notify, scorer
 from .arms import available, describe, get_arm
 from .arms.base import RunResult, Task
 from .config import REPO_ROOT, Config
@@ -149,7 +149,8 @@ def execute_run(
         except deploy.DeployError as exc:
             raise PreflightError(str(exc)) from exc
 
-    referee = Referee(config.referee, workspace=workspace.path)
+    # Caps are per level: hard gets a longer clock than easy or medium.
+    referee = Referee(config.referee.for_level(level), workspace=workspace.path)
     workspace.git_init()
 
     started = datetime.now(timezone.utc)
@@ -198,6 +199,8 @@ def execute_run(
         "verdict": verdict.to_dict() if verdict else None,
         "ledger": ledger.to_dict(),
         "asked_question": ledger.questions > 0,
+        "cost_usd": _total_cost(result.processes),
+        "model": next((p.model for p in result.processes if p.model), None),
         "permission_denials": sum(p.permission_denials for p in result.processes),
         "files": {
             "touched": len(ledger.files_written),
@@ -227,6 +230,11 @@ def execute_run(
         json.dumps(redactor.obj(record), indent=2) + "\n", encoding="utf-8"
     )
     return workspace.run_dir, record
+
+
+def _total_cost(processes) -> float | None:
+    costs = [p.total_cost_usd for p in processes if isinstance(p.total_cost_usd, (int, float))]
+    return round(sum(costs), 4) if costs else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -275,6 +283,12 @@ def main(argv: list[str] | None = None) -> int:
 
     log = logtool.write_log(run_dir)
     print(f"log     {log}")
+
+    if config.email.enabled:
+        score_path = run_dir / "score.json"
+        score = json.loads(score_path.read_text(encoding="utf-8")) if score_path.exists() else None
+        sent, why = notify.send_report(record, score, log.read_text(encoding="utf-8"), config.email)
+        print(f"email   {'sent - ' if sent else 'not sent - '}{why}")
     return 0
 
 

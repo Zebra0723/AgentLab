@@ -102,6 +102,11 @@ def render(record: dict[str, Any], score: dict[str, Any] | None) -> str:
         f"   ({ledger.get('deploy_successes', 0)} succeeded)"
     )
     add(f"  wall clock           {_hms(ledger.get('wall_clock_seconds'))} of {_hms(caps.get('wall_clock_seconds'))}")
+    cost = record.get("cost_usd")
+    model = record.get("model")
+    if cost is not None or model:
+        shown = f"${cost:.3f}" if isinstance(cost, (int, float)) else "(not reported)"
+        add(f"  cost                 {shown}   model {_plain(model or '(not reported)', 30)}")
     denials = record.get("permission_denials") or 0
     if denials:
         add(f"  tool calls REFUSED   {denials}  (the harness blocked the agent this often)")

@@ -1,15 +1,15 @@
 {
-  "_comment": "Frozen benchmark tasks. expected_files is the number of source files a competent build needs; it is the denominator for the files-touched metric, not a rule the agent is told about.",
+  "_comment": "Frozen benchmark tasks. Each names the exact element ids and rules the hidden tests depend on: a check cannot be deterministic if every agent invents its own structure. expected_files is what a competent build needs, and is the denominator for the files-touched metric, not a rule the agent is told about.",
   "easy": {
     "expected_files": 1,
-    "task": "Build a single-page site that shows the current UTC time, updating every second. It needs a heading that reads 'UTC Clock', the live time in an element with id=\"clock\", and a button with id=\"freeze\" that stops and restarts the updating. Plain HTML, CSS and JavaScript in one file. No frameworks, no build step."
+    "task": "Build a to-do list page. It needs: a text input with id=\"new-todo\"; a button with id=\"add-todo\" that adds the input's current text as a task and then clears the input; a list with id=\"todo-list\" in which every task is one <li> containing the task's text and a delete button with class=\"delete\" that removes just that task. Tasks must persist in localStorage and still be there after a page reload. Adding an empty or whitespace-only input must do nothing at all: no new item, no error, and the page must keep working normally afterwards."
   },
   "medium": {
-    "expected_files": 3,
-    "task": "Build a tip calculator site. It needs an input with id=\"bill\" for the bill amount, an input with id=\"tip-percent\" for the tip percentage defaulting to 18, a control with id=\"split\" for splitting between 1 to 12 people, and three outputs with ids \"tip-amount\", \"total\" and \"per-person\" that update as the inputs change. Handle an empty or non-numeric bill without showing NaN. Keep it to static files."
+    "expected_files": 2,
+    "task": "Build a text adventure that runs in the page. It needs: an input with id=\"command\" and a button with id=\"submit\", and pressing Enter in the input must submit too; an element with id=\"room\" showing the current room's name; an element with id=\"output\" showing the reply to the most recent command; an element with id=\"inventory\" listing what the player is carrying. The world has exactly three rooms: Hall (where the player starts), Library and Vault. From the Hall, \"go north\" moves to the Library. From the Library, \"go east\" moves to the Vault and \"go south\" returns to the Hall. A key lies in the Library; \"take key\" moves it into the inventory, and the inventory must then show the word key. In the Vault, if the player is carrying the key, \"unlock door\" wins the game and #output must contain the text YOU WIN. Any command you do not recognise must produce a reply in #output and leave the game playable: the player carries on as normal."
   },
   "hard": {
-    "expected_files": 6,
-    "task": "Build a markdown note-taking site that persists to localStorage. It needs a list of notes with id=\"note-list\", a button with id=\"new-note\" that creates one, a textarea with id=\"editor\", a live rendered preview in an element with id=\"preview\" supporting headings, bold, italic, links, inline code and unordered lists, and a search box with id=\"search\" that filters the note list by title and body. Notes must survive a page reload. Write the markdown renderer yourself; no markdown library."
+    "expected_files": 2,
+    "task": "Build the game Pong in the page. It needs: a playfield element with id=\"field\"; two score elements with id=\"score-left\" and id=\"score-right\", both showing 0 at the start; a left paddle the player moves with the ArrowUp and ArrowDown keys, and a right paddle played by the computer. The game must publish its live state on window.pong as {ball: {x, y}, paddles: {left: y, right: y}, score: {left, right}, field: {width, height}}, in playfield coordinates, updated on every animation frame. The ball must stay inside the playfield at all times: its x must always be between 0 and field.width and its y between 0 and field.height. The ball must move fast enough that, if neither paddle is moved at all, one side scores a point within 10 seconds."
   }
 }

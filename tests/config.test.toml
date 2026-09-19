@@ -54,3 +54,15 @@ create_path = "/v11/projects"
 lookup_path = "/v9/projects"
 team_id = ""
 timeout_seconds = 5
+
+[email]
+# The test suite must never send mail.
+enabled = false
+to = "nobody@example.invalid"
+from_address = "nobody@example.invalid"
+username = "nobody@example.invalid"
+smtp_host = "smtp.example.invalid"
+smtp_port = 587
+starttls = true
+password_env = "AGENT_LAB_TEST_SMTP_PASSWORD"
+timeout_seconds = 5

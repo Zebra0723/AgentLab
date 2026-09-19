@@ -54,6 +54,9 @@ class AgentProcessResult:
     transcript_lines: int = 0
     result_subtype: str | None = None
     total_cost_usd: float | None = None
+    # The model the agent actually ran on. A silent fallback mid-experiment
+    # would otherwise corrupt a comparison with nothing in the record to show it.
+    model: str | None = None
     # Tool calls the harness refused. A non-zero count here means the agent was
     # fighting the setup, not the task.
     permission_denials: int = 0
@@ -69,6 +72,7 @@ class AgentProcessResult:
             "session_id": self.session_id,
             "result_subtype": self.result_subtype,
             "total_cost_usd": self.total_cost_usd,
+            "model": self.model,
             "permission_denials": self.permission_denials,
             "stderr_tail": self.stderr_tail,
         }
@@ -276,6 +280,8 @@ def _supervise(
                 continue
 
             result.session_id = obj.get("session_id") or result.session_id
+            if obj.get("type") == "system" and obj.get("subtype") == "init":
+                result.model = obj.get("model") or result.model
             if obj.get("type") == "result":
                 result.result_subtype = obj.get("subtype")
                 cost = obj.get("total_cost_usd")

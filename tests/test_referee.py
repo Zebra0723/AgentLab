@@ -269,6 +269,25 @@ class RefereeUnit(unittest.TestCase):
         self.assertEqual(referee.ledger.thinking_messages, 1)
         self.assertEqual([a.detail for a in actions if a.kind is ActionKind.MESSAGE][0], "(thinking)")
 
+    def test_the_clock_cap_follows_the_level(self):
+        """Hard is a bigger build and gets a longer clock."""
+        real = Config.load().referee
+        self.assertEqual(real.for_level("easy").wall_clock_seconds, 4 * 3600)
+        self.assertEqual(real.for_level("medium").wall_clock_seconds, 4 * 3600)
+        self.assertEqual(real.for_level("hard").wall_clock_seconds, 6 * 3600)
+
+    def test_an_unlisted_level_gets_the_default_clock(self):
+        real = Config.load().referee
+        self.assertEqual(real.for_level("nonexistent").wall_clock_seconds, real.wall_clock_seconds)
+
+    def test_only_the_clock_varies_by_level(self):
+        real = Config.load().referee
+        hard = real.for_level("hard")
+        self.assertEqual(hard.message_cap, real.message_cap)
+        self.assertEqual(hard.deploy_cap, real.deploy_cap)
+        self.assertEqual(hard.silent_loop_writes, real.silent_loop_writes)
+        self.assertEqual(hard.question_cap, real.question_cap)
+
     def test_paths_normalize_to_one_file(self):
         """Absolute and relative spellings of one file are one file."""
         workspace = RUNS_ROOT / "_normtest" / "workspace"

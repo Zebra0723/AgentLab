@@ -12,8 +12,12 @@
 # comparable: an arm that spends messages on coordination pays for them.
 message_cap = 60
 
-# 4 hours.
+# 4 hours, unless the level says otherwise below.
 wall_clock_seconds = 14400
+
+# Hard is a bigger build and gets longer. A level not listed here uses the
+# default above.
+wall_clock_by_level = { easy = 14400, medium = 14400, hard = 21600 }
 
 # Counts deploy *attempts*, not successes. A command that matches a deploy
 # pattern has spent budget whether or not it worked; counting successes only
@@ -162,4 +166,30 @@ lookup_path = "/v9/projects"
 # Set this when VERCEL_TOKEN is scoped to a team rather than a personal account.
 team_id = ""
 
+timeout_seconds = 30
+
+[email]
+# A report of every finished run: the morning log, with the deployment on top.
+#
+# The password is never stored here. Put an app-specific password in the
+# environment variable named below and export it alongside your tokens:
+#
+#   export SMTP_PASSWORD='your-app-specific-password'
+#
+# iCloud, Gmail and Outlook all require an app-specific password rather than
+# your account password. A run is never failed by a mail problem; if the mail
+# cannot be sent, the reason is printed once and the run still stands.
+enabled = true
+to = "arjunvirjain@icloud.com"
+
+# Your full email address, which is also the SMTP username for iCloud.
+from_address = "arjunvirjain@icloud.com"
+username = "arjunvirjain@icloud.com"
+
+# iCloud. Gmail is smtp.gmail.com; Outlook is smtp-mail.outlook.com.
+smtp_host = "smtp.mail.me.com"
+smtp_port = 587
+starttls = true
+
+password_env = "SMTP_PASSWORD"
 timeout_seconds = 30

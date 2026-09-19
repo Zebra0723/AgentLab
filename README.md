@@ -119,7 +119,7 @@ before it:
 | condition | fires when |
 | --- | --- |
 | `message_cap` | assistant messages reach the cap (default 60) |
-| `wall_clock` | the run reaches the time cap (default 4h) |
+| `wall_clock` | the run reaches the time cap (4h easy and medium, 6h hard) |
 | `deploy_cap` | deploy attempts reach 10 |
 | `silent_loop` | the same file is written 4+ times with no deploy in between |
 | `question_loop` | the agent asks the human anything twice |
@@ -184,73 +184,71 @@ benchmarks/
   hidden/<level>.json   the hidden tests
 ```
 
+| level | build | the four checks |
+| --- | --- | --- |
+| easy | to-do list | add shows it, survives reload, delete removes it, empty input is harmless |
+| medium | text adventure | three rooms reachable, item goes in inventory, game can be won, nonsense doesn't break it |
+| hard | Pong | ball moves, paddle answers the keys, someone scores, ball never leaves the field |
+
+Four checks per level, so a score is always out of 4. Each task names the exact
+element ids and rules its checks depend on - a check cannot be deterministic if
+every agent invents its own structure.
+
 Hidden tests are declarative: a list of named checks, each with an assertion
 type and optional interaction `steps`, run in a fresh browser context.
 
 ```json
-{"name": "freeze-stops-clock", "type": "text_stable", "selector": "#clock",
- "wait_ms": 1800, "steps": [{"click": "#freeze"}]}
+{"name": "paddle-responds-to-keys", "type": "evaluate_changes",
+ "expression": "window.pong.paddles.left",
+ "steps_between": [{"hold": {"key": "ArrowUp", "ms": 700}}]}
 ```
 
-Steps: `click`, `fill`, `press`, `reload`, `wait_ms`.
+Steps: `click`, `fill`, `press`, `hold`, `keys`, `reload`, `wait_ms`.
+`steps_between` runs actions *between* the two readings of a `_changes` check -
+without it, "did this input move the thing" is unmeasurable, because the move
+is over before the first reading.
+
 Assertions: `exists`, `absent`, `all_exist`, `count`, `text_present`,
 `text_absent`, `text_matches`, `text_equals`, `value_matches`, `text_changes`,
-`text_stable`, `no_console_errors`.
+`text_stable`, `no_console_errors`, `evaluate`, `evaluate_changes`,
+`wait_for_expression`. The last three read the page's own live state, which is
+how a game is checked: its truth is in its state object, not its pixels.
 
 Checks run under Playwright. **If Playwright is unavailable the run is marked
 UNSCORED and the checks are printed as manual prompts** - the harness never
-guesses a pass. Install it with `pip install playwright` (a browser is needed;
-set `AGENT_LAB_CHROMIUM` if Playwright cannot find one).
+guesses a pass.
 
-## Deployments
+**The hidden tests are themselves tested.** A correct and a deliberately broken
+build of all three apps are scored in development; the correct one must get 4/4
+and the broken one must fail exactly the check aimed at its defect. Wrong
+hidden tests would poison every result in the experiment.
 
-The harness decides which project a run publishes to, not the agent. Before the
-agent starts, it creates the project and writes `.vercel/project.json` into the
-workspace; the agent's own `vercel deploy` then lands there without being told
-to, and without being able to choose otherwise.
+## Reporting
 
-Names come from the arm and the level:
+After each run the harness writes the log and, if `[email].enabled` is on,
+emails it:
 
-| arm | level | project |
-| --- | --- | --- |
-| arm1 | easy | `agent-1-level-1` |
-| arm2 | medium | `agent-2-level-2` |
-| arm1 | hard | `agent-1-level-3` |
+```bash
+export SMTP_PASSWORD='your-app-specific-password'
+```
 
-Re-running the same arm on the same level gives `agent-1-level-1-2`, then `-3`,
-so every run keeps its own project and its own URL and stays re-scorable later.
-The project name is recorded in `run.json` and printed in the log.
+Recipient, sender and SMTP host live under `[email]` in `config.toml`. The
+password is only ever read from the environment. A mail problem never fails a
+run; the reason is printed once and the run still stands.
 
-All of it is configurable under `[deploy]` in `config.toml` - the template, the
-level numbering, the API endpoints (so a Vercel API version bump needs no code
-change), and `team_id` for a token scoped to a team rather than a personal
-account. Set `manage_projects = false` to hand naming back to the agent, at the
-cost of unreadable names and one more thing varying between arms.
+For the experiment as a whole:
 
-A run refuses to start if the project cannot be created. A result nobody can
-trace back to an arm is worse than no result.
+```bash
+python3 -m agent_lab.summary
+python3 -m agent_lab.summary --csv results.csv
+python3 -m agent_lab.summary --email
+```
 
-**Deployment Protection.** If your Vercel account turns it on for new projects,
-every deployment answers anonymous visitors with a 302 to `vercel.com/sso-api`.
-The scorer catches this - `SHIPPED: FAIL ... redirected off-origin` - but the
-fix is on Vercel's side: turn Vercel Authentication off as the default for new
-projects.
-
-## Safety
-
-- Agents run only inside `runs/<id>/workspace/`. A sandbox path that resolves
-  outside the `runs/` tree - including through a symlink - refuses to start.
-- Credentials come from the environment only. A run hard-fails at startup if
-  `GITHUB_TOKEN` or `VERCEL_TOKEN` is missing. They are passed to the child
-  process and never written to disk, never put in the prompt, and redacted out
-  of every transcript, record and log before anything is written.
-- The child's environment is an allowlist. `CLAUDE_CODE_*` is stripped, so an
-  agent process never inherits the harness's own session.
-- The harness commits the workspace after every successful deploy, so the git
-  trail is the harness's doing rather than something the agent must remember.
-- The harness fingerprints itself and `config.toml` at the start of a run and
-  re-checks at the end. If either changed, the log says so and the run should be
-  treated as void.
+That walks `runs/` and prints every run, then the four things worth comparing
+across arms: ship rate, hidden tests passed, messages spent, and
+instruction-following. It flags cells with fewer than three runs as one sample
+rather than a measurement, and warns when runs did not all use the same model.
+It deliberately does not rank arms or compute a single score.
 
 ## What the harness does not guarantee
 
@@ -286,13 +284,14 @@ Worth knowing before you trust a number.
 python3 -m unittest discover -s tests -v
 ```
 
-69 tests. `tests/test_referee.py` fires every kill condition through the real
+92 tests. `tests/test_referee.py` fires every kill condition through the real
 runner and a real child process - the only stand-in is the agent itself
 (`agent_lab/fakeagent.py`, which replays a script and speaks the same
 stream-json protocol). `tests/test_scorer.py` serves a correct page, a broken
 page, a dead page and one that redirects off-origin, and checks each verdict.
 `tests/test_deploy.py` covers project naming and collisions against a fake API
-client, so the suite never touches the network.
+client and `tests/test_report.py` covers the email and the summary, so the
+suite never touches the network or sends mail.
 
 Tests use `tests/config.test.toml`: the same config shape with caps small enough
 to fire in seconds.
