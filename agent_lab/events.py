@@ -42,6 +42,7 @@ class Action:
     path: str | None = None
     url: str | None = None
     subagent: bool = False
+    thinking: bool = False
 
     def render(self) -> str:
         """One fixed-width line for the morning log."""
@@ -61,6 +62,8 @@ class Action:
             d["url"] = self.url
         if self.subagent:
             d["subagent"] = True
+        if self.thinking:
+            d["thinking"] = True
         return d
 
 
@@ -121,14 +124,26 @@ class TranscriptParser:
         tool_blocks = [b for b in blocks if isinstance(b, dict) and b.get("type") == "tool_use"]
         text_blocks = [b for b in blocks if isinstance(b, dict) and b.get("type") == "text"]
         text = "\n".join(str(b.get("text", "")) for b in text_blocks).strip()
+        # A message whose only content is a thinking block spends budget without
+        # doing anything observable. Worth counting on its own: an arm on an
+        # extended-thinking model spends its messages very differently.
+        thinking_only = (
+            not tool_blocks
+            and not text
+            and any(isinstance(b, dict) and b.get("type") == "thinking" for b in blocks)
+        )
+
+        if text:
+            detail = _summarize(text)
+        elif tool_blocks:
+            detail = f"{len(tool_blocks)} tool call(s)"
+        elif thinking_only:
+            detail = "(thinking)"
+        else:
+            detail = "(no visible content)"
 
         actions: list[Action] = [
-            self._next(
-                elapsed,
-                ActionKind.MESSAGE,
-                _summarize(text) if text else f"{len(tool_blocks)} tool call(s)",
-                subagent=is_subagent,
-            )
+            self._next(elapsed, ActionKind.MESSAGE, detail, subagent=is_subagent, thinking=thinking_only)
         ]
 
         for block in tool_blocks:

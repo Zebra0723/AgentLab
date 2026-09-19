@@ -245,6 +245,30 @@ class RefereeUnit(unittest.TestCase):
             with self.assertRaises((AttributeError, TypeError)):
                 setattr(referee.caps, name, 10_000)
 
+    def test_thinking_only_messages_are_counted_separately(self):
+        """A live arm1 run spent 26 of its 60 messages on thinking alone.
+
+        They count toward the cap - they are messages - but they are also
+        counted on their own, because an arm on an extended-thinking model
+        spends its budget very differently from one that does not.
+        """
+        parser = TranscriptParser(Config.load(TEST_CONFIG).referee.detect)
+        referee = self.make()
+        stream = [
+            {"type": "assistant", "parent_tool_use_id": None,
+             "message": {"content": [{"type": "thinking", "thinking": "hmm", "signature": "x"}]}},
+            {"type": "assistant", "parent_tool_use_id": None,
+             "message": {"content": [{"type": "text", "text": "here goes"}]}},
+            {"type": "assistant", "parent_tool_use_id": None,
+             "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]}},
+        ]
+        actions = [a for message in stream for a in parser.feed(message, 0.0)]
+        for action in actions:
+            referee.observe(action)
+        self.assertEqual(referee.ledger.messages, 3)
+        self.assertEqual(referee.ledger.thinking_messages, 1)
+        self.assertEqual([a.detail for a in actions if a.kind is ActionKind.MESSAGE][0], "(thinking)")
+
     def test_paths_normalize_to_one_file(self):
         """Absolute and relative spellings of one file are one file."""
         workspace = RUNS_ROOT / "_normtest" / "workspace"

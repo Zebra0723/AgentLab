@@ -63,6 +63,7 @@ class Ledger:
 
     messages: int = 0
     subagent_messages: int = 0
+    thinking_messages: int = 0
     tool_calls: int = 0
     writes: int = 0
     deploys: int = 0
@@ -76,6 +77,7 @@ class Ledger:
         return {
             "messages": self.messages,
             "subagent_messages": self.subagent_messages,
+            "thinking_messages": self.thinking_messages,
             "tool_calls": self.tool_calls,
             "writes": self.writes,
             "deploys": self.deploys,
@@ -183,6 +185,8 @@ class Referee:
             led.messages += 1
             if action.subagent:
                 led.subagent_messages += 1
+            if action.thinking:
+                led.thinking_messages += 1
         elif action.kind is ActionKind.TOOL:
             led.tool_calls += 1
         elif action.kind is ActionKind.WRITE:

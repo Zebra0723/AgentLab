@@ -69,7 +69,10 @@ def render(record: dict[str, Any], score: dict[str, Any] | None) -> str:
     # -- SHIPPED ----------------------------------------------------------
     shipped = (score or {}).get("shipped", "UNSCORED")
     add(f"SHIPPED: {shipped}   {_plain((score or {}).get('shipped_detail', 'not scored'), 50)}")
-    add(f"  url    {_plain(record.get('deploy_url') or '(none)', 60)}")
+    # The scored URL wins: a run scored manually against a served workspace has
+    # a URL the run itself never produced.
+    scored_url = (score or {}).get("url") or record.get("deploy_url")
+    add(f"  url    {_plain(scored_url or '(none)', 60)}")
     add("")
 
     # -- instruction following, mechanical --------------------------------
@@ -79,7 +82,9 @@ def render(record: dict[str, Any], score: dict[str, Any] | None) -> str:
     emoji = metrics.get("emoji_count")
     add(f"  emoji in shipped UI  {emoji if emoji is not None else '(not measured)'}")
     add(f"  files touched        {files.get('touched', 0)} of {files.get('needed', '?')} needed")
-    add(f"  messages             {ledger.get('messages', 0)} of {caps.get('message_cap', '?')}")
+    thinking = ledger.get("thinking_messages", 0)
+    aside = f"   ({thinking} were thinking only)" if thinking else ""
+    add(f"  messages             {ledger.get('messages', 0)} of {caps.get('message_cap', '?')}{aside}")
     add(
         f"  deploys              {ledger.get('deploys', 0)} of {caps.get('deploy_cap', '?')}"
         f"   ({ledger.get('deploy_successes', 0)} succeeded)"
