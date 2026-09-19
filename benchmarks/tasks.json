@@ -1,0 +1,15 @@
+{
+  "_comment": "Frozen benchmark tasks. expected_files is the number of source files a competent build needs; it is the denominator for the files-touched metric, not a rule the agent is told about.",
+  "easy": {
+    "expected_files": 1,
+    "task": "Build a single-page site that shows the current UTC time, updating every second. It needs a heading that reads 'UTC Clock', the live time in an element with id=\"clock\", and a button with id=\"freeze\" that stops and restarts the updating. Plain HTML, CSS and JavaScript in one file. No frameworks, no build step."
+  },
+  "medium": {
+    "expected_files": 3,
+    "task": "Build a tip calculator site. It needs an input with id=\"bill\" for the bill amount, an input with id=\"tip-percent\" for the tip percentage defaulting to 18, a control with id=\"split\" for splitting between 1 to 12 people, and three outputs with ids \"tip-amount\", \"total\" and \"per-person\" that update as the inputs change. Handle an empty or non-numeric bill without showing NaN. Keep it to static files."
+  },
+  "hard": {
+    "expected_files": 6,
+    "task": "Build a markdown note-taking site that persists to localStorage. It needs a list of notes with id=\"note-list\", a button with id=\"new-note\" that creates one, a textarea with id=\"editor\", a live rendered preview in an element with id=\"preview\" supporting headings, bold, italic, links, inline code and unordered lists, and a search box with id=\"search\" that filters the note list by title and body. Notes must survive a page reload. Write the markdown renderer yourself; no markdown library."
+  }
+}

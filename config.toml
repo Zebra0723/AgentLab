@@ -1,0 +1,136 @@
+# agent-lab referee configuration.
+#
+# These caps belong to the referee, not to the agent. Nothing in this file is
+# ever interpolated into benchmarks/prompt.txt, passed to an agent process, or
+# written into a workspace. The agent cannot read it and cannot change it:
+# runner.py hashes this file at startup and records the hash in run.json, and
+# re-verifies the hash when the run ends.
+
+[referee]
+# A "message" is one assistant message observed on the transcript stream, summed
+# across every agent process in the run. One shared budget per run keeps arms
+# comparable: an arm that spends messages on coordination pays for them.
+message_cap = 60
+
+# 4 hours.
+wall_clock_seconds = 14400
+
+# Counts deploy *attempts*, not successes. A command that matches a deploy
+# pattern has spent budget whether or not it worked; counting successes only
+# would let a broken deploy loop run forever.
+deploy_cap = 10
+
+# Silent loop: the same file written this many times with no deploy in between.
+silent_loop_writes = 4
+
+# Question loop: the agent asks the human anything this many times.
+question_cap = 2
+
+# How many actions to keep for the "last actions before it died" report.
+action_window = 5
+
+# After a kill condition fires: SIGTERM the process group, wait this long, then
+# SIGKILL. Claude Code exits 143 on SIGTERM and tears down its own child shells.
+kill_grace_seconds = 10
+
+# Poll interval for the wall-clock check while the agent is quiet.
+tick_seconds = 1.0
+
+[referee.detect]
+# A Bash command matching any of these counts as a deploy attempt.
+#
+# These match a command *position* - start of line, or after ; && || | - rather
+# than assuming a shape. A real agent's first deploy was
+# `npx --yes vercel@latest deploy --prod`, which an `npx\s+vercel` pattern does
+# not match: the referee counted zero deploys and deploy_cap could never have
+# fired. The prefix allows env assignments, a package runner with its own
+# flags, a path, and an @version suffix.
+#
+# TOML literal strings (single quotes) so backslashes reach the regex engine.
+deploy_commands = [
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*(?:(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)(?:\s+--?[\w-]+)*\s+)?(?:[\w./-]*/)?vercel(?:@[\w.^~-]+)?\b(?!\s*(?:ls|list|logs|whoami|env|link|pull|inspect|teams|projects|domains|certs|dns|alias|secrets|help|--help|-h|--version|-v)\b)',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*(?:(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)(?:\s+--?[\w-]+)*\s+)?(?:[\w./-]*/)?netlify(?:-cli)?(?:@[\w.^~-]+)?\s+deploy\b',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*(?:(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)(?:\s+--?[\w-]+)*\s+)?(?:[\w./-]*/)?wrangler(?:@[\w.^~-]+)?\s+(?:deploy|publish)\b',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*gh\s+workflow\s+run\b',
+]
+
+# A deploy attempt is *successful* when its tool result contains a URL matching
+# one of these. The last one seen is the run's deploy URL.
+deploy_urls = [
+  '''https://[a-zA-Z0-9][a-zA-Z0-9._-]*\.vercel\.app[^\s"'<>)\]]*''',
+  '''https://[a-zA-Z0-9][a-zA-Z0-9._-]*\.netlify\.app[^\s"'<>)\]]*''',
+  '''https://[a-zA-Z0-9][a-zA-Z0-9._-]*\.workers\.dev[^\s"'<>)\]]*''',
+  '''https://[a-zA-Z0-9][a-zA-Z0-9._-]*\.github\.io[^\s"'<>)\]]*''',
+]
+
+# Tool calls that count as writing a file, and the tool input key holding the path.
+write_tools = { Write = "file_path", Edit = "file_path", MultiEdit = "file_path", NotebookEdit = "notebook_path" }
+
+# Tool calls that count as asking the human a question.
+question_tools = ["AskUserQuestion"]
+
+# A final assistant message (one with no tool calls) matching this counts as a
+# question too. Headless runs deny AskUserQuestion, so an agent that wants to
+# ask has to ask in prose; without this the question loop could never fire.
+question_text = '(?is)(\?\s*)$|\b(should I|shall I|would you like|do you want me to|which would you prefer|let me know (if|whether|which)|please (confirm|clarify|advise)|could you (confirm|clarify|tell me))\b'
+
+# A final assistant message matching this counts as the agent reporting done.
+# The agent process exiting cleanly also counts as done, on its own.
+done_text = '(?i)\b(DONE|COMPLETE|COMPLETED|FINISHED|all set|task is complete|I am done)\b'
+
+[agent]
+binary = "claude"
+# "" means: let the agent binary pick its default. Pin it for a real experiment.
+model = ""
+permission_mode = "acceptEdits"
+
+# Tools the agent may use without being asked. This matters more than it looks:
+# acceptEdits on its own approves file edits but almost no shell, so an agent
+# with an empty allowlist cannot run a build or a deploy and spends its whole
+# budget being denied. A bare "Bash" pre-approves any command, which is what a
+# build-and-ship benchmark needs.
+#
+# This list is part of the experimental setup. Change it and you have changed
+# the experiment, so change it for every arm at once, and note it in
+# predictions.md. Denied calls are counted and reported in the log, so a
+# misconfigured allowlist shows up as a number rather than as a bad score.
+allowed_tools = ["Bash", "Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "TodoWrite"]
+max_turns = 0                  # 0 = no per-process turn limit; the referee is the limit
+include_partial_messages = false
+
+# Bare mode skips CLAUDE.md, hooks, plugins, MCP servers and custom commands, so
+# the agent starts from the prompt and nothing else. That is what a controlled
+# experiment wants - but it also means the agent authenticates with
+# ANTHROPIC_API_KEY rather than a subscription login. Turn it on once your
+# environment has an API key, and record which way the experiment was run.
+bare = false
+
+# Appended verbatim to every agent invocation. Escape hatch for flags this
+# config does not model, without touching runner.py.
+extra_args = []
+
+# Environment variables an agent process inherits. Everything else is stripped,
+# including CLAUDE_CODE_* (so a child never inherits the harness's own session)
+# and GITHUB_TOKEN / VERCEL_TOKEN, which are injected separately and only when
+# they appear in grant_credentials below.
+env_passthrough = [
+  "PATH", "HOME", "LANG", "LC_ALL", "TZ", "TERM", "SHELL", "USER", "LOGNAME",
+  "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL",
+  "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+  "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "NODE_PATH",
+  "NPM_CONFIG_CACHE", "PLAYWRIGHT_BROWSERS_PATH", "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD",
+]
+
+# The agent needs these to deploy. They are read from the parent's environment
+# and handed to the child process only. They are never written to disk, never
+# rendered into the prompt, and redacted out of every transcript and log.
+grant_credentials = ["GITHUB_TOKEN", "VERCEL_TOKEN"]
+
+[scorer]
+# A run is SHIPPED only if the URL answers within this long.
+http_timeout_seconds = 30
+# How long a hidden test may wait for a selector before failing.
+check_timeout_ms = 10000
+# Chromium viewport for hidden tests.
+viewport_width = 1280
+viewport_height = 800

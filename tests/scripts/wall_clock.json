@@ -1,0 +1,13 @@
+{
+  "steps": [
+    {
+      "do": "say",
+      "text": "starting"
+    },
+    {
+      "do": "sleep",
+      "seconds": 30
+    }
+  ],
+  "final": "success"
+}

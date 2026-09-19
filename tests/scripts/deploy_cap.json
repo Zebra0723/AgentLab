@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "do": "deploy",
+      "command": "npx vercel --prod",
+      "url": "https://fake-1.vercel.app",
+      "repeat": 3
+    },
+    {
+      "do": "say",
+      "text": "still going"
+    }
+  ],
+  "final": "success"
+}

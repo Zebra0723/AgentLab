@@ -1,0 +1,18 @@
+{
+  "steps": [
+    {
+      "do": "say",
+      "text": "deploying with token AGENTLAB-FAKE-VERCEL-TOKEN-0123456789"
+    },
+    {
+      "do": "bash",
+      "command": "vercel whoami --token AGENTLAB-FAKE-VERCEL-TOKEN-0123456789",
+      "result": "logged in as AGENTLAB-FAKE-VERCEL-TOKEN-0123456789"
+    },
+    {
+      "do": "done",
+      "text": "DONE"
+    }
+  ],
+  "final": "success"
+}

@@ -1,0 +1,10 @@
+{
+  "steps": [
+    {
+      "do": "say",
+      "text": "leaving early"
+    }
+  ],
+  "final": "error_during_execution",
+  "exit_code": 1
+}

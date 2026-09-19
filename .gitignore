@@ -1,0 +1,8 @@
+# Run artifacts: every run writes here. Never commit agent workspaces or transcripts.
+runs/*
+!runs/.gitkeep
+
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/

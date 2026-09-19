@@ -1,0 +1,21 @@
+{
+  "steps": [
+    {
+      "do": "ask",
+      "text": "Should I use a framework?"
+    },
+    {
+      "do": "say",
+      "text": "carrying on"
+    },
+    {
+      "do": "ask",
+      "text": "Which colour scheme would you prefer?"
+    },
+    {
+      "do": "say",
+      "text": "still going"
+    }
+  ],
+  "final": "success"
+}

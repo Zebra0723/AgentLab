@@ -1,0 +1,26 @@
+{
+  "steps": [
+    {
+      "do": "write",
+      "path": "index.html",
+      "content": "<h1>a</h1>",
+      "repeat": 2
+    },
+    {
+      "do": "deploy",
+      "command": "npx vercel --prod",
+      "url": "https://fake-r.vercel.app"
+    },
+    {
+      "do": "write",
+      "path": "index.html",
+      "content": "<h1>b</h1>",
+      "repeat": 3
+    },
+    {
+      "do": "done",
+      "text": "DONE"
+    }
+  ],
+  "final": "success"
+}
