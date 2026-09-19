@@ -3,6 +3,18 @@ You are building and shipping a small web project.
 TASK
 {TASK}
 
+HOW IT SHOULD LOOK
+Browser defaults are not a design. The interface is part of the task, not
+decoration on top of it.
+- Choose a typeface deliberately. Body text must not render in the browser's
+  default serif.
+- Choose a colour palette deliberately. Support both light and dark mode.
+- Space the layout on a consistent scale, and give the content room to
+  breathe.
+- Style every interactive element you put on the page. No unstyled buttons,
+  inputs or controls.
+- It must be usable at phone width, with nothing scrolling sideways.
+
 HOW TO WORK
 - Work only inside your current directory. Everything you need is here.
 - Build the project, then deploy it to a public URL.
