@@ -1,0 +1,10 @@
+{
+  "steps": [
+    {
+      "do": "say",
+      "text": "thinking about it",
+      "repeat": 10
+    }
+  ],
+  "final": "success"
+}

@@ -1,0 +1,43 @@
+# Test caps. Same shape as config.toml, small enough that a kill condition
+# fires in seconds instead of hours. Proving the referee needs tiny caps, not
+# different code.
+
+[referee]
+message_cap = 8
+wall_clock_seconds = 3
+deploy_cap = 3
+silent_loop_writes = 4
+question_cap = 2
+action_window = 5
+kill_grace_seconds = 2
+tick_seconds = 0.2
+
+[referee.detect]
+deploy_commands = [
+  '(^|[;&|]\s*)(npx\s+)?vercel\b(?!\s+(ls|list|logs|whoami|env|link|pull|inspect|teams|projects|domains|help))',
+  '(^|[;&|]\s*)(npx\s+)?netlify\s+deploy\b',
+]
+deploy_urls = [
+  '''https://[a-zA-Z0-9][a-zA-Z0-9._-]*\.vercel\.app[^\s"'<>)\]]*''',
+]
+write_tools = { Write = "file_path", Edit = "file_path", MultiEdit = "file_path", NotebookEdit = "notebook_path" }
+question_tools = ["AskUserQuestion"]
+question_text = '(?is)(\?\s*)$|\b(should I|shall I|would you like|do you want me to)\b'
+done_text = '(?i)\b(DONE|COMPLETE|FINISHED)\b'
+
+[agent]
+binary = "claude"
+model = ""
+permission_mode = "acceptEdits"
+max_turns = 0
+include_partial_messages = false
+bare = false
+extra_args = []
+env_passthrough = ["PATH", "HOME", "LANG", "TZ", "TERM", "USER"]
+grant_credentials = ["GITHUB_TOKEN", "VERCEL_TOKEN"]
+
+[scorer]
+http_timeout_seconds = 5
+check_timeout_ms = 4000
+viewport_width = 1280
+viewport_height = 800

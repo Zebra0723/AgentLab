@@ -1,0 +1,16 @@
+{
+  "level": "easy",
+  "description": "UTC clock: renders, ticks, and the freeze button actually freezes.",
+  "checks": [
+    {"name": "heading", "type": "text_present", "text": "UTC Clock"},
+    {"name": "clock-element", "type": "exists", "selector": "#clock"},
+    {"name": "clock-shows-time", "type": "text_matches", "selector": "#clock", "pattern": "\\d{1,2}:\\d{2}:\\d{2}"},
+    {"name": "clock-ticks", "type": "text_changes", "selector": "#clock", "wait_ms": 1800},
+    {"name": "freeze-button", "type": "exists", "selector": "#freeze"},
+    {"name": "freeze-stops-clock", "type": "text_stable", "selector": "#clock", "wait_ms": 1800,
+     "steps": [{"click": "#freeze"}]},
+    {"name": "freeze-toggles-back", "type": "text_changes", "selector": "#clock", "wait_ms": 1800,
+     "steps": [{"click": "#freeze"}, {"wait_ms": 300}, {"click": "#freeze"}]},
+    {"name": "no-console-errors", "type": "no_console_errors"}
+  ]
+}

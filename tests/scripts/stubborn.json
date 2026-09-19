@@ -1,0 +1,14 @@
+{
+  "stubborn": true,
+  "steps": [
+    {
+      "do": "say",
+      "text": "you cannot stop me"
+    },
+    {
+      "do": "sleep",
+      "seconds": 60
+    }
+  ],
+  "final": "hang"
+}

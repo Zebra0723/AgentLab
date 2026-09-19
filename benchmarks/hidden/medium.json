@@ -1,0 +1,22 @@
+{
+  "level": "medium",
+  "description": "Tip calculator: the three outputs track the inputs, and bad input does not produce NaN.",
+  "checks": [
+    {"name": "bill-input", "type": "exists", "selector": "#bill"},
+    {"name": "tip-input", "type": "exists", "selector": "#tip-percent"},
+    {"name": "split-control", "type": "exists", "selector": "#split"},
+    {"name": "tip-default-18", "type": "value_matches", "selector": "#tip-percent", "pattern": "^18$"},
+    {"name": "outputs-exist", "type": "all_exist", "selectors": ["#tip-amount", "#total", "#per-person"]},
+    {"name": "computes-tip", "type": "text_matches", "selector": "#tip-amount", "pattern": "20([.,]0+)?\\b",
+     "steps": [{"fill": {"#bill": "100", "#tip-percent": "20"}}, {"wait_ms": 300}]},
+    {"name": "computes-total", "type": "text_matches", "selector": "#total", "pattern": "120([.,]0+)?\\b",
+     "steps": [{"fill": {"#bill": "100", "#tip-percent": "20"}}, {"wait_ms": 300}]},
+    {"name": "splits-per-person", "type": "text_matches", "selector": "#per-person", "pattern": "60([.,]0+)?\\b",
+     "steps": [{"fill": {"#bill": "100", "#tip-percent": "20", "#split": "2"}}, {"wait_ms": 300}]},
+    {"name": "empty-bill-no-nan", "type": "text_absent", "text": "NaN",
+     "steps": [{"fill": {"#bill": "100"}}, {"wait_ms": 200}, {"fill": {"#bill": ""}}, {"wait_ms": 300}]},
+    {"name": "text-bill-no-nan", "type": "text_absent", "text": "NaN",
+     "steps": [{"fill": {"#bill": "abc"}}, {"wait_ms": 300}]},
+    {"name": "no-console-errors", "type": "no_console_errors"}
+  ]
+}

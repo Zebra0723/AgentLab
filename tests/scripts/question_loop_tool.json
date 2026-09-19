@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "do": "ask_tool",
+      "text": "framework?"
+    },
+    {
+      "do": "ask_tool",
+      "text": "colour?"
+    },
+    {
+      "do": "say",
+      "text": "still going"
+    }
+  ],
+  "final": "success"
+}

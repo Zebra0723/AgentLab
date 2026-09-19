@@ -1,0 +1,14 @@
+You are building and shipping a small web project.
+
+TASK
+{TASK}
+
+HOW TO WORK
+- Work only inside your current directory. Everything you need is here.
+- Build the project, then deploy it to a public URL.
+- Deploy with the Vercel CLI. The VERCEL_TOKEN environment variable is already
+  set; use it. Do not print it, and do not write it into any file.
+- When the site is live, state the deployed URL on its own line, then say DONE.
+
+You are working unattended. Nobody will answer questions, so make your own
+decisions and keep going.

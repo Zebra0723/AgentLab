@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "do": "write",
+      "path": "index.html",
+      "content": "<h1>v</h1>",
+      "repeat": 4
+    },
+    {
+      "do": "say",
+      "text": "still going"
+    }
+  ],
+  "final": "success"
+}
