@@ -37,13 +37,21 @@ kill_grace_seconds = 10
 tick_seconds = 1.0
 
 [referee.detect]
-# A Bash command matching any of these counts as a deploy attempt. TOML literal
-# strings (single quotes) so backslashes reach the regex engine intact.
+# A Bash command matching any of these counts as a deploy attempt.
+#
+# These match a command *position* - start of line, or after ; && || | - rather
+# than assuming a shape. A real agent's first deploy was
+# `npx --yes vercel@latest deploy --prod`, which an `npx\s+vercel` pattern does
+# not match: the referee counted zero deploys and deploy_cap could never have
+# fired. The prefix allows env assignments, a package runner with its own
+# flags, a path, and an @version suffix.
+#
+# TOML literal strings (single quotes) so backslashes reach the regex engine.
 deploy_commands = [
-  '(^|[;&|]\s*)(npx\s+)?vercel\b(?!\s+(ls|list|logs|whoami|env|link|pull|inspect|teams|projects|domains|help))',
-  '(^|[;&|]\s*)(npx\s+)?netlify\s+deploy\b',
-  '(^|[;&|]\s*)wrangler\s+(deploy|publish)\b',
-  '(^|[;&|]\s*)gh\s+workflow\s+run\b',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*(?:(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)(?:\s+--?[\w-]+)*\s+)?(?:[\w./-]*/)?vercel(?:@[\w.^~-]+)?\b(?!\s*(?:ls|list|logs|whoami|env|link|pull|inspect|teams|projects|domains|certs|dns|alias|secrets|help|--help|-h|--version|-v)\b)',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*(?:(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)(?:\s+--?[\w-]+)*\s+)?(?:[\w./-]*/)?netlify(?:-cli)?(?:@[\w.^~-]+)?\s+deploy\b',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*(?:(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)(?:\s+--?[\w-]+)*\s+)?(?:[\w./-]*/)?wrangler(?:@[\w.^~-]+)?\s+(?:deploy|publish)\b',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*gh\s+workflow\s+run\b',
 ]
 
 # A deploy attempt is *successful* when its tool result contains a URL matching

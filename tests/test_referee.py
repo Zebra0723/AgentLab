@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agent_lab import runner  # noqa: E402
 from agent_lab.arms import available, get_arm, registry  # noqa: E402
 from agent_lab.config import REPO_ROOT, Config  # noqa: E402
-from agent_lab.events import Action, ActionKind  # noqa: E402
+from agent_lab.events import Action, ActionKind, TranscriptParser  # noqa: E402
 from agent_lab.redact import Redactor  # noqa: E402
 from agent_lab.referee import KillCondition, Referee  # noqa: E402
 from agent_lab.sandbox import RUNS_ROOT, SandboxError, Workspace, assert_inside_runs  # noqa: E402
@@ -310,6 +310,72 @@ class ArmSeam(unittest.TestCase):
         with self.assertRaises(KeyError) as caught:
             get_arm("arm9")
         self.assertIn("arm9", str(caught.exception))
+
+
+class DeployDetection(unittest.TestCase):
+    """The referee must recognise a deploy however the agent spelled it.
+
+    Regression: the first live arm1 run deployed with
+    `npx --yes vercel@latest deploy --prod`. The old pattern assumed
+    `npx vercel`, matched nothing, and the referee recorded zero deploys - so
+    deploy_cap could never fire and the silent-loop counter never reset.
+    """
+
+    DEPLOYS = [
+        'npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" 2>&1 | tail -50',
+        "npx --yes vercel@32 deploy --prod --yes 2>&1 | tail -60",
+        "npx vercel --prod",
+        "vercel deploy --prod",
+        "vercel --prod",
+        "cd site && vercel deploy",
+        "VERCEL_TOKEN=x vercel deploy --prod",
+        "./node_modules/.bin/vercel deploy",
+        "pnpm dlx vercel deploy --prod",
+        "npx netlify deploy --prod",
+        "wrangler deploy",
+        "gh workflow run deploy.yml",
+    ]
+
+    NOT_DEPLOYS = [
+        "vercel ls",
+        "vercel whoami",
+        "vercel --version",
+        "cat vercel.json",
+        'curl -s https://api.vercel.com/v2/user -H "Authorization: Bearer x"',
+        "ls /root/.local/share/com.vercel.cli",
+        'find / -iname "*vercel*"',
+        "grep -r vercel .",
+        "npm install vercel",
+        "echo deploying to vercel",
+    ]
+
+    def setUp(self) -> None:
+        self.detect = Config.load().referee.detect
+
+    def matches(self, command: str) -> bool:
+        return any(p.search(command) for p in self.detect.deploy_commands)
+
+    def test_real_deploy_commands_are_counted(self):
+        for command in self.DEPLOYS:
+            with self.subTest(command=command):
+                self.assertTrue(self.matches(command), f"missed a deploy: {command}")
+
+    def test_mentions_of_vercel_are_not_deploys(self):
+        for command in self.NOT_DEPLOYS:
+            with self.subTest(command=command):
+                self.assertFalse(self.matches(command), f"false positive: {command}")
+
+    def test_a_deploy_action_comes_out_of_the_stream(self):
+        """End to end through the parser, not just the regex."""
+        parser = TranscriptParser(self.detect)
+        message = {
+            "type": "assistant",
+            "parent_tool_use_id": None,
+            "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash",
+                                     "input": {"command": "npx --yes vercel@latest deploy --prod --yes"}}]},
+        }
+        kinds = [a.kind for a in parser.feed(message, 0.0)]
+        self.assertIn(ActionKind.DEPLOY, kinds)
 
 
 class Redaction(unittest.TestCase):

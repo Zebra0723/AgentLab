@@ -14,8 +14,8 @@ tick_seconds = 0.2
 
 [referee.detect]
 deploy_commands = [
-  '(^|[;&|]\s*)(npx\s+)?vercel\b(?!\s+(ls|list|logs|whoami|env|link|pull|inspect|teams|projects|domains|help))',
-  '(^|[;&|]\s*)(npx\s+)?netlify\s+deploy\b',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*(?:(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)(?:\s+--?[\w-]+)*\s+)?(?:[\w./-]*/)?vercel(?:@[\w.^~-]+)?\b(?!\s*(?:ls|list|logs|whoami|env|link|pull|inspect|teams|projects|domains|certs|dns|alias|secrets|help|--help|-h|--version|-v)\b)',
+  '(?:^|[\n;&|]+\s*)(?:\w+=\S+\s+)*(?:(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx)(?:\s+--?[\w-]+)*\s+)?(?:[\w./-]*/)?netlify(?:-cli)?(?:@[\w.^~-]+)?\s+deploy\b',
 ]
 deploy_urls = [
   '''https://[a-zA-Z0-9][a-zA-Z0-9._-]*\.vercel\.app[^\s"'<>)\]]*''',
