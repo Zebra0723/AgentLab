@@ -64,6 +64,12 @@ def render(record: dict[str, Any], score: dict[str, Any] | None) -> str:
         add(f"  {_plain(prompt, WIDTH - 2)}")
     if not checks and not ((score or {}).get("manual_prompts")):
         add("  (no hidden tests were run)")
+    # Nothing found at all, on a URL that answered, is usually the URL rather
+    # than the build: a login wall, a platform error page, or the app served
+    # from somewhere other than the root.
+    if checks and not any(c.get("status") == "PASS" for c in checks):
+        add("  NOTE: not one check found the app. Open the URL yourself - a page")
+        add("        that answers is not necessarily the page you deployed.")
     add("")
 
     # -- SHIPPED ----------------------------------------------------------
@@ -73,6 +79,9 @@ def render(record: dict[str, Any], score: dict[str, Any] | None) -> str:
     # a URL the run itself never produced.
     scored_url = (score or {}).get("url") or record.get("deploy_url")
     add(f"  url    {_plain(scored_url or '(none)', 60)}")
+    final_url = ((score or {}).get("metrics") or {}).get("final_url")
+    if final_url and scored_url and final_url != scored_url:
+        add(f"  landed {_plain(final_url, 60)}")
     add("")
 
     # -- instruction following, mechanical --------------------------------

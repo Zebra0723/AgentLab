@@ -340,23 +340,55 @@ def _opener(url: str):
     return urllib.request.build_opener()
 
 
-def http_status(url: str, timeout: float) -> tuple[int | None, str]:
+def same_origin(first: str, second: str) -> bool:
+    """Same host, ignoring scheme, port and a leading www."""
+    def host(u: str) -> str:
+        h = (urllib.parse.urlsplit(u).hostname or "").lower()
+        return h[4:] if h.startswith("www.") else h
+
+    return host(first) == host(second)
+
+
+def http_status(url: str, timeout: float) -> tuple[int | None, str, str]:
+    """Status, a note, and the URL the request actually ended up at.
+
+    urllib follows redirects, so without the final URL a deployment that hands
+    every visitor to a login wall on another host looks like a healthy 200.
+    """
     request = urllib.request.Request(url, headers={"User-Agent": "agent-lab-scorer"})
     try:
         with _opener(url).open(request, timeout=timeout) as response:
-            return response.status, ""
+            return response.status, "", response.url or url
     except urllib.error.HTTPError as exc:
-        return exc.code, f"HTTP {exc.code}"
+        return exc.code, f"HTTP {exc.code}", getattr(exc, "url", url) or url
     except Exception as exc:
-        return None, _short(exc)
+        return None, _short(exc), url
 
 
 def check_shipped(url: str, config: Config) -> tuple[str, str, int | None, dict[str, Any]]:
-    """200 and renders. Both halves, or it is not SHIPPED."""
-    status, note = http_status(url, config.scorer.http_timeout_seconds)
-    metrics: dict[str, Any] = {}
+    """200 and renders, at the URL that was deployed. Or it is not SHIPPED.
+
+    "Returns 200" is not the same claim as "serves the app". A deployment
+    behind Vercel's Deployment Protection answers every anonymous visitor with
+    a 302 to vercel.com/sso-api, which renders a perfectly healthy login page.
+    Following that quietly and calling it SHIPPED reports the platform's
+    availability, not the agent's. An off-origin redirect fails, and the log
+    names where it went.
+    """
+    status, note, final_url = http_status(url, config.scorer.http_timeout_seconds)
+    metrics: dict[str, Any] = {"final_url": final_url}
     if status != 200:
         return FAIL, note or f"HTTP {status}", status, metrics
+
+    if not same_origin(url, final_url):
+        host = urllib.parse.urlsplit(final_url).hostname or final_url
+        metrics["redirected_off_origin"] = True
+        return (
+            FAIL,
+            f"redirected off-origin to {host} - the deployment is not serving the app to the public",
+            status,
+            metrics,
+        )
 
     available, reason = playwright_available()
     if not available:
@@ -371,14 +403,14 @@ def check_shipped(url: str, config: Config) -> tuple[str, str, int | None, dict[
                 body = page.inner_text("body") or ""
                 elements = page.evaluate("() => document.body ? document.body.querySelectorAll('*').length : 0")
                 emoji = EMOJI_RE.findall(body)
-                metrics = {
+                metrics.update({
                     "emoji_count": len(emoji),
                     "emoji_distinct": len(set(emoji)),
                     "rendered_text_chars": len(body.strip()),
                     "dom_elements": int(elements),
                     "console_errors": len(errors.real()),
                     "title": (page.title() or "")[:120],
-                }
+                })
                 rendered = bool(body.strip()) and int(elements) > 0
                 detail = f"HTTP 200, {int(elements)} elements, {len(body.strip())} chars of text"
                 return (PASS if rendered else FAIL), (detail if rendered else "HTTP 200 but the page renders nothing"), status, metrics

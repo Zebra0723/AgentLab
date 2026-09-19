@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent_lab import scorer  # noqa: E402
 from agent_lab.config import Config  # noqa: E402
+from agent_lab.scorer import same_origin  # noqa: E402
 
 TEST_CONFIG = Path(__file__).resolve().parent / "config.test.toml"
 
@@ -62,6 +63,55 @@ def serving(html: str):
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):  # keep the test output readable
         pass
+
+
+@contextlib.contextmanager
+def redirecting_to(target_host: str):
+    """Serve a 302 to another host, the way a protected deployment does."""
+
+    class Redirector(QuietHandler):
+        def do_GET(self):
+            # The destination serves a real page, as a login wall does. Only
+            # the entry point redirects, so there is no loop.
+            if self.path.startswith("/wall"):
+                body = b"<!doctype html><html><body><h1>Sign in to continue</h1></body></html>"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            self.send_response(302)
+            self.send_header("Location", f"http://{target_host}:{self.server.server_address[1]}/wall")
+            self.end_headers()
+
+    with socketserver.TCPServer(("127.0.0.1", 0), Redirector) as httpd:
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{httpd.server_address[1]}/"
+        finally:
+            httpd.shutdown()
+            thread.join(timeout=5)
+
+
+class OriginCheck(unittest.TestCase):
+    """A deployment that hands visitors to someone else has not shipped.
+
+    Regression: a live run deployed behind Vercel's Deployment Protection. The
+    URL answered 302 -> vercel.com/sso-api, urllib and Playwright both followed
+    it, and the scorer reported SHIPPED: PASS for Vercel's login page - 145 DOM
+    elements of somebody else's app.
+    """
+
+    def test_ordinary_redirects_stay_same_origin(self):
+        self.assertTrue(same_origin("https://x.vercel.app/", "https://x.vercel.app/index.html"))
+        self.assertTrue(same_origin("http://x.vercel.app", "https://x.vercel.app/"))
+        self.assertTrue(same_origin("https://x.vercel.app", "https://www.x.vercel.app/"))
+
+    def test_a_different_host_is_not_the_same_origin(self):
+        self.assertFalse(same_origin("https://x.vercel.app/", "https://vercel.com/sso-api?url=x"))
+        self.assertFalse(same_origin("https://x.vercel.app/", "https://evil.example/"))
 
 
 class ScorerCase(unittest.TestCase):
@@ -115,6 +165,23 @@ class NothingToScore(ScorerCase):
             report = scorer.score(dead, "easy", self.config)
         self.assertEqual(report.shipped, scorer.FAIL)
         self.assertEqual(report.http_status, 404)
+
+
+class OffOriginRedirect(ScorerCase):
+    def test_a_redirect_to_another_host_fails_shipped(self):
+        with redirecting_to("localhost") as url:
+            report = scorer.score(url, "easy", self.config)
+        self.assertEqual(report.shipped, scorer.FAIL)
+        self.assertIn("off-origin", report.shipped_detail)
+        self.assertEqual(report.http_status, 200)
+        self.assertTrue(report.metrics.get("redirected_off_origin"))
+        self.assertIn("localhost", report.metrics.get("final_url", ""))
+
+    def test_the_final_url_is_always_recorded(self):
+        with serving(GOOD_CLOCK) as url:
+            report = scorer.score(url, "easy", self.config)
+        self.assertEqual(report.shipped, scorer.PASS)
+        self.assertIn("127.0.0.1", report.metrics.get("final_url", ""))
 
 
 class WithoutPlaywright(ScorerCase):
