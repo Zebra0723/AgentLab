@@ -68,4 +68,33 @@ Not built yet. Predict before building, not after.
 
 | run id | arm | level | outcome | BUILT | SHIPPED | messages | deploys | asked? | files | emoji |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | | | | | |
+| 20260919-115231-easy-arm1-707b | arm1 | easy | message_cap | PASS | PASS* | 60 of 60 | 4 of 10 | no | 1 of 1 | 0 |
+
+\* SHIPPED here means "serves locally". This run had no real `VERCEL_TOKEN`, so
+it was scored against `python3 -m http.server` over `runs/<id>/workspace/`.
+It is not evidence that the arm can deploy.
+
+### What the first run cost the prediction
+
+Predicted `agent_done` in 8-15 messages. Got `message_cap` at 60, with 4 deploy
+attempts and none successful.
+
+The build itself was never in doubt: one file, 8/8 hidden tests, 1 file touched
+of 1 needed, no questions, no emoji. Everything after the build went on the
+deploy. The token was a placeholder, the Vercel CLI rejected it as malformed,
+and the agent spent its remaining budget diagnosing the environment - looking
+for a cached credential, reading the CLI's own source, checking proxy settings -
+rather than retrying blindly. That is why it died on `message_cap` and not
+`deploy_cap`: a stuck agent that thinks does not trip the deploy counter.
+
+The "most likely wrong" note above called the deploy assumption and was right
+about the cause, wrong about which cap would catch it.
+
+26 of the 60 messages carried nothing but a thinking block. Worth holding onto
+when reading any later arm's message count: nearly half this budget bought no
+observable action, and an arm on a different thinking setting is not spending
+the same currency.
+
+**Before trusting any cross-arm comparison, give the harness a working deploy
+path.** An arm that cannot ship cannot be told apart from an arm that ships
+badly, and every arm will die on a budget cap for the same uninteresting reason.
